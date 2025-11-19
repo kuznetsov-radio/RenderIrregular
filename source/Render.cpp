@@ -1,58 +1,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
+#include "ExtMath.h"
+#include "Render.h"
 #ifndef LINUX
 #include <ppl.h>
 #else
 #include <omp.h>
 #endif
-
-#define arrN 1000
-
-#ifdef LINUX
-#define finite isfinite
-#else
-#define finite _finite
-#endif
-
-inline double sqr(double x)
-{
- return x*x;
-}
-
-inline int min(int a, int b)
-{
- return (a<b) ? a : b;
-}
-
-inline int max(int a, int b)
-{
- return (a>b) ? a : b;
-}
-
-inline double max(double a, double b)
-{
- return (a>b) ? a : b;
-}
-
-inline double min(double a, double b)
-{
- return (a<b) ? a : b;
-}
-
-inline void arrswap(double *a, int i, int j)
-{
- double tmp=a[i];
- a[i]=a[j];
- a[j]=tmp;
-}
-
-inline void arrswap(int *a, int i, int j)
-{
- int tmp=a[i];
- a[i]=a[j];
- a[j]=tmp;
-}
 
 int CheckCrossPixel(double xl, double xr, double yb, double yt, double x1, double x2, double y1, double y2)
 {
@@ -83,54 +38,12 @@ int CheckCrossPixel(double xl, double xr, double yb, double yt, double x1, doubl
  return 0;
 }
 
-int value_locate(double *a, int n, double x)
+int RenderMain(int Nx, int Ny, int Nz, double dx, double dy, double *dz, 
+               double x1, double x2, double y1, double y2, double z1, double z2, 
+               int VoxOn, int OnedOn, int arrN, __int32 *VoxelID, 
+               __int32 *NVoxels, __int32 *VoxList, double *ds, 
+               double *x_ind, double *y_ind, double *z_ind, double *entry_point, double *exit_point)
 {
- if (x<a[0]) return -1;
- if (x>=a[n-1]) return n-1;
-
- int j, j1, l;
- j=0; 
- j1=n-1; 
- while (j1-j>1) 
- { 
-  l=(j+j1)>>1; 
-  if (a[l]>x) j1=l; 
-  else j=l; 
- } 
- return j;
-} 
-
-#ifndef LINUX
-extern "C" __declspec(dllexport) int RENDER(int argc, void **argv)
-#else
-extern "C" int RENDER(int argc, void **argv)
-#endif
-{
- int Nx=*((short*)argv[0]);
- int Ny=*((short*)argv[1]);
- int Nz=*((short*)argv[2]);
- double dx=*((double*)argv[3]);
- double dy=*((double*)argv[4]);
- double *dz=(double*)argv[5];
- double x1=*((double*)argv[6]);
- double x2=*((double*)argv[7]);
- double y1=*((double*)argv[8]);
- double y2=*((double*)argv[9]);
- double z1=*((double*)argv[10]);
- double z2=*((double*)argv[11]);
- int VoxOn=*((short*)argv[12]);
- int OnedOn=*((short*)argv[13]);
- int *VoxelId=(int*)argv[14];
-
- int *Nvoxels=(int*)argv[15];
- int *VoxList=(int*)argv[16]; 
- double *ds=(double*)argv[17];
- double *x_ind=(double*)argv[18]; 
- double *y_ind=(double*)argv[19]; 
- double *z_ind=(double*)argv[20];
- double *entry_point=(double*)argv[21];
- double *exit_point=(double*)argv[22];
-
  double *tmidarr=(double*)malloc(sizeof(double)*arrN);
  int *iarr=(int*)malloc(sizeof(int)*Nx*Ny);
  int *jarr=(int*)malloc(sizeof(int)*Nx*Ny);
@@ -140,7 +53,7 @@ extern "C" int RENDER(int argc, void **argv)
 
  int res=0;
 
- //---
+ //----------------------------------------------
 
  double L=sqrt(sqr(x2-x1)+sqr(y2-y1)+sqr(z2-z1));
  
@@ -151,7 +64,7 @@ extern "C" int RENDER(int argc, void **argv)
  double tcmin= 1e100;
  double tcmax=-1e100;
  
- *Nvoxels=0;
+ *NVoxels=0;
  
  int imin=max(int(floor(min(x1, x2)/dx)), 0);
  int imax=min(int(ceil(max(x1, x2)/dx)), Nx-1);
@@ -286,49 +199,49 @@ extern "C" int RENDER(int argc, void **argv)
 	 }
 	}
     
-    for (int r=0; r<Nz; r++) if ((*Nvoxels<arrN) && (Ncrossings[r]==2))
+    for (int r=0; r<Nz; r++) if ((*NVoxels<arrN) && (Ncrossings[r]==2))
 	{
-     VoxList[*Nvoxels]=r*Nx*Ny+j*Nx+i;
-     ds[*Nvoxels]=fabs(tarr[r]-tarr[r+Nz])*L;
-     tmidarr[*Nvoxels]=(tarr[r]+tarr[r+Nz])/2;
+     VoxList[*NVoxels]=r*Nx*Ny+j*Nx+i;
+     ds[*NVoxels]=fabs(tarr[r]-tarr[r+Nz])*L;
+     tmidarr[*NVoxels]=(tarr[r]+tarr[r+Nz])/2;
      
-     double xmid=x1+tmidarr[*Nvoxels]*bx;
-     double ymid=y1+tmidarr[*Nvoxels]*by;
-     double zmid=z1+tmidarr[*Nvoxels]*bz;
-     x_ind[*Nvoxels]=min(max(xmid/dx-0.5, 0.0), double(Nx-1));
-     y_ind[*Nvoxels]=min(max(ymid/dy-0.5, 0.0), double(Ny-1));
-     z_ind[*Nvoxels]=min(max(r+(zmid-zbarr[r])/(zbarr[r+1]-zbarr[r])-0.5, 0.0), double(Nz-1));
+     double xmid=x1+tmidarr[*NVoxels]*bx;
+     double ymid=y1+tmidarr[*NVoxels]*by;
+     double zmid=z1+tmidarr[*NVoxels]*bz;
+     x_ind[*NVoxels]=min(max(xmid/dx-0.5, 0.0), double(Nx-1));
+     y_ind[*NVoxels]=min(max(ymid/dy-0.5, 0.0), double(Ny-1));
+     z_ind[*NVoxels]=min(max(r+(zmid-zbarr[r])/(zbarr[r+1]-zbarr[r])-0.5, 0.0), double(Nz-1));
      
-     if (VoxOn && !OnedOn) if (VoxelId[i+(j+r*Ny)*Nx] & 1)
+     if (VoxOn && !OnedOn) if (VoxelID[i+(j+r*Ny)*Nx] & 1)
 	 {
-      x_ind[*Nvoxels]=i;
-      y_ind[*Nvoxels]=j;
-      z_ind[*Nvoxels]=r;
+      x_ind[*NVoxels]=i;
+      y_ind[*NVoxels]=j;
+      z_ind[*NVoxels]=r;
 	 } 
 	 else
 	 {
 	  int ke=0;
-	  int vox0=VoxelId[i+(j+r*Ny)*Nx];
+	  int vox0=VoxelID[i+(j+r*Ny)*Nx];
 	  for (int i1=max(i-1, 0); i1<=min(i+1, Nx-1); i1++) for (int j1=max(j-1, 0); j1<=min(j+1, Ny-1); j1++) for (int k1=max(r-1, 0); k1<=min(r+1, Nz-1); k1++)
-	   if (VoxelId[i1+(j1+k1*Ny)*Nx]!=vox0) ke++;
+	   if (VoxelID[i1+(j1+k1*Ny)*Nx]!=vox0) ke++;
       if (ke!=0) 
 	  {
-       x_ind[*Nvoxels]=i;
-       y_ind[*Nvoxels]=j;
-       z_ind[*Nvoxels]=r;
+       x_ind[*NVoxels]=i;
+       y_ind[*NVoxels]=j;
+       z_ind[*NVoxels]=r;
 	  }
 	 }
 	
-     (*Nvoxels)++; 
-     if (*Nvoxels>=arrN) res=1;
+     (*NVoxels)++; 
+     if (*NVoxels>=arrN) res=1;
 	}
    }
   }
  }
  
- if ((*Nvoxels>0) && (*Nvoxels<arrN))
+ if ((*NVoxels>0) && (*NVoxels<arrN))
  {
-  for (int p=0; p<(*Nvoxels-1); p++) for (int q=p+1; q<(*Nvoxels); q++) if (tmidarr[p]>tmidarr[q])
+  for (int p=0; p<(*NVoxels-1); p++) for (int q=p+1; q<(*NVoxels); q++) if (tmidarr[p]>tmidarr[q])
   {
    arrswap(tmidarr, p, q);
    arrswap(VoxList, p, q);
@@ -338,7 +251,7 @@ extern "C" int RENDER(int argc, void **argv)
    arrswap(z_ind, p, q);
   }
   
-  if (VoxOn && OnedOn) for (int i=0; i<(*Nvoxels); i++) if (VoxelId[VoxList[i]] & 1)
+  if (VoxOn && OnedOn) for (int i=0; i<(*NVoxels); i++) if (VoxelID[VoxList[i]] & 1)
   {
    x_ind[i]=round(x_ind[i]);
    y_ind[i]=round(y_ind[i]);
@@ -347,7 +260,7 @@ extern "C" int RENDER(int argc, void **argv)
   else 
   {
    int ke=0;
-   for (int i1=max(i-1, 0); i1<=min(i+1, *Nvoxels-1); i1++) if (VoxelId[VoxList[i1]]!=VoxelId[VoxList[i]]) ke++;
+   for (int i1=max(i-1, 0); i1<=min(i+1, *NVoxels-1); i1++) if (VoxelID[VoxList[i1]]!=VoxelID[VoxList[i]]) ke++;
    if (ke!=0) 
    {
     x_ind[i]=round(x_ind[i]);
@@ -364,7 +277,7 @@ extern "C" int RENDER(int argc, void **argv)
   exit_point[2]=z1+tcmax*bz;
  }
 
- if (*Nvoxels>=arrN) *Nvoxels=0;
+ if (*NVoxels>=arrN) *NVoxels=0;
 
  //---
 
@@ -374,78 +287,6 @@ extern "C" int RENDER(int argc, void **argv)
  free(zbarr);
  free(Ncrossings);
  free(tarr);
-
- return res;
-}
-
-#ifndef LINUX
-extern "C" __declspec(dllexport) int RENDER_MULTI(int argc, void **argv)
-#else
-extern "C" int RENDER_MULTI(int argc, void **argv)
-#endif
-{
- int NLOS=*((int*)argv[0]);
-
- int *res_arr=(int*)malloc(sizeof(int)*NLOS);
-
- #ifndef LINUX
-
- concurrency::parallel_for(0, NLOS, [&](int l)
- {
-  void *ARGV[23];
-  for (int i=0; i<23; i++) ARGV[i]=argv[i+1];
-
-  ARGV[6]= (void*)(((double*)ARGV[6]) +l); //x1
-  ARGV[7]= (void*)(((double*)ARGV[7]) +l); //x2
-  ARGV[8]= (void*)(((double*)ARGV[8]) +l); //y1
-  ARGV[9]= (void*)(((double*)ARGV[9]) +l); //y2
-  ARGV[10]=(void*)(((double*)ARGV[10])+l); //z1
-  ARGV[11]=(void*)(((double*)ARGV[11])+l); //z2
-
-  ARGV[15]=(void*)(((int*)ARGV[15])+l); //Nvoxels
-  ARGV[16]=(void*)(((int*)ARGV[16])+l*arrN); //VoxList
-  ARGV[17]=(void*)(((double*)ARGV[17])+l*arrN); //ds
-  ARGV[18]=(void*)(((double*)ARGV[18])+l*arrN); //x_ind
-  ARGV[19]=(void*)(((double*)ARGV[19])+l*arrN); //y_ind
-  ARGV[20]=(void*)(((double*)ARGV[20])+l*arrN); //z_ind
-  ARGV[21]=(void*)(((double*)ARGV[21])+l*3); //entry_point
-  ARGV[22]=(void*)(((double*)ARGV[22])+l*3); //exit_point
-
-  res_arr[l]=RENDER(23, ARGV);
- });
-
- #else
-
- #pragma omp parallel for
- for (int l=0; l<NLOS; l++)
- {
-  void *ARGV[23];
-  for (int i=0; i<23; i++) ARGV[i]=argv[i+1];
-
-  ARGV[6]= (void*)(((double*)ARGV[6]) +l); //x1
-  ARGV[7]= (void*)(((double*)ARGV[7]) +l); //x2
-  ARGV[8]= (void*)(((double*)ARGV[8]) +l); //y1
-  ARGV[9]= (void*)(((double*)ARGV[9]) +l); //y2
-  ARGV[10]=(void*)(((double*)ARGV[10])+l); //z1
-  ARGV[11]=(void*)(((double*)ARGV[11])+l); //z2
-
-  ARGV[15]=(void*)(((int*)ARGV[15])+l); //Nvoxels
-  ARGV[16]=(void*)(((int*)ARGV[16])+l*arrN); //VoxList
-  ARGV[17]=(void*)(((double*)ARGV[17])+l*arrN); //ds
-  ARGV[18]=(void*)(((double*)ARGV[18])+l*arrN); //x_ind
-  ARGV[19]=(void*)(((double*)ARGV[19])+l*arrN); //y_ind
-  ARGV[20]=(void*)(((double*)ARGV[20])+l*arrN); //z_ind
-  ARGV[21]=(void*)(((double*)ARGV[21])+l*3); //entry_point
-  ARGV[22]=(void*)(((double*)ARGV[22])+l*3); //exit_point
-
-  res_arr[l]=RENDER(23, ARGV);
- }
-
- #endif
-
- int res=0;
- for (int i=0; i<NLOS; i++) if (res_arr[i]) res=1;
- free(res_arr);
 
  return res;
 }
