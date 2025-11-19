@@ -1,5 +1,5 @@
 pro RenderIrregular, dx, dy, dz, xx, yy, zz, $
-                     Nvoxels, VoxList, ds, $
+                     NVoxels, VoxList, ds, $
                      x_ind, y_ind, z_ind, $
                      entry_point, exit_point, $
                      voxel_id=voxel_id, oneD=oneD
@@ -33,11 +33,11 @@ pro RenderIrregular, dx, dy, dz, xx, yy, zz, $
 ;         directions are considered in the above algorithm.
 ;
 ;Output parameters:
-; Nvoxels - number of the voxels intersected by the line of sight (may be zero if the line passes beyond the cube)
-; VoxList - 1D indices of the intersected voxels (1D array with Nvoxels elements)
-; ds - projected depths of the intersected voxels (1D array with Nvoxels elements), i.e.
+; NVoxels - number of the voxels intersected by the line of sight (may be zero if the line passes beyond the cube)
+; VoxList - 1D indices of the intersected voxels (1D array with NVoxels elements)
+; ds - projected depths of the intersected voxels (1D array with NVoxels elements), i.e.
 ;      ds[i] is the length of the fragment of the line of sight falling within the i-th voxel
-; x_ind, y_ind, z_ind - three 1D arrays (with Nvoxels elements) representing the 'fractional' indices of the
+; x_ind, y_ind, z_ind - three 1D arrays (with NVoxels elements) representing the 'fractional' indices of the
 ;      line-of-sight midpoints within each of the intersected voxels.
 ;      The integer part of an index is the integer index of the corresponding voxel 
 ;      and the fractional part is relative to the length, width, or height of that voxel.
@@ -45,54 +45,63 @@ pro RenderIrregular, dx, dy, dz, xx, yy, zz, $
 ;                           and exits the data cube 
 
 ;------------------ input
- s=size(dz)
- Nx=s[1]
- Ny=s[2]
- Nz=s[3]
+ arrN=1000
 
- x1=xx[0]
- x2=xx[1]
- y1=yy[0]
- y2=yy[1]
- z1=zz[0]
- z2=zz[1]
+ Lparms=lonarr(6)
+ s=size(dz, /dimensions)
+ Lparms[0]=s[0]
+ Lparms[1]=s[1]
+ Lparms[2]=s[2]
+ Lparms[3]=arrN
+ Lparms[4]=keyword_set(voxel_id) ? 1 : 0
+ Lparms[5]=keyword_set(oneD) ? 1 : 0
  
- VoxOn=keyword_set(voxel_id) ? 1 : 0
- OnedOn=keyword_set(oneD) ? 1 : 0
+ pixsize=dblarr(2)
+ pixsize[0]=dx
+ pixsize[1]=dy
  
- plh=0
- 
+ LOS=dblarr(6)
+ LOS[0]=xx[0]
+ LOS[1]=yy[0]
+ LOS[2]=zz[0]
+ LOS[3]=xx[1]
+ LOS[4]=yy[1]
+ LOS[5]=zz[1]
+
 ;------------------ output
- N=1000
-
- Nvoxels=0L
- VoxList=lonarr(N)
- ds=dblarr(N)
- x_ind=dblarr(N)
- y_ind=dblarr(N)
- z_ind=dblarr(N)
- entry_point=dblarr(3)
- exit_point=dblarr(3)
+ NVoxels=0L
+ VoxList=lonarr(arrN)
+ VoxData=dblarr(arrN, 4)
+ epoints=dblarr(3, 2)
  
 ;------------------ main code
  dirpath=file_dirname((routine_info('RenderIrregular', /source)).path, /mark)
  if !version.os_family eq 'Windows' then $
   lib=dirpath+'RenderIrregular'+((!version.arch eq 'x86_64') ? '64' : '32')+'.dll' $
- else lib=dirpath+'RenderIrregular.so' 
+ else lib=dirpath+'RenderIrregular.so'
  
- res=call_external(lib, 'RENDER', $
-                   Nx, Ny, Nz, dx, dy, dz, $
-                   x1, x2, y1, y2, z1, z2, $
-                   VoxOn, OnedOn, VoxOn ? voxel_id : plh, $
-                   Nvoxels, VoxList, ds, $
-                   x_ind, y_ind, z_ind, entry_point, exit_point)  
+ res=1
+ repeat begin
+  res=call_external(lib, 'RENDER', $
+                    Lparms, pixsize, dz, LOS, (Lparms[4] ne 0) ? voxel_id : 0d0, $
+                    NVoxels, VoxList, VoxData, epoints)
+  
+  if res ne 0 then begin
+   arrN+=1000
+   Lparms[3]=arrN
+   VoxList=lonarr(arrN)
+   VoxData=dblarr(arrN, 4)
+  endif                  
+ endrep until res eq 0                     
                    
- if res then print, 'Number of voxels along the line-of-sight exceeds the allowed limit (1000).' $
- else if Nvoxels gt 0 then begin
-  VoxList=VoxList[0 : Nvoxels-1]
-  ds=ds[0 : Nvoxels-1]
-  x_ind=x_ind[0 : Nvoxels-1]
-  y_ind=y_ind[0 : Nvoxels-1]
-  z_ind=z_ind[0 : Nvoxels-1]
+ if NVoxels gt 0 then begin
+  VoxList=VoxList[0 : NVoxels-1]
+  ds=reform(VoxData[0 : NVoxels-1, 0])
+  x_ind=reform(VoxData[0 : NVoxels-1, 1])
+  y_ind=reform(VoxData[0 : NVoxels-1, 2])
+  z_ind=reform(VoxData[0 : NVoxels-1, 3])
+  
+  entry_point=reform(epoints[*, 0])
+  exit_point=reform(epoints[*, 1])
  endif              
 end
