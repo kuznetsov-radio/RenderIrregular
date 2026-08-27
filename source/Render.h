@@ -1,6 +1,7 @@
 #pragma once
 
 #ifdef LINUX
+#include <stdint.h>
 #define __int32 int32_t
 #endif
 
