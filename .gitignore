@@ -1,0 +1,6 @@
+# In-place compile leftovers (the shipped library lives in binaries/)
+source/*.o
+source/*.obj
+source/*.so
+source/*.dylib
+.DS_Store
